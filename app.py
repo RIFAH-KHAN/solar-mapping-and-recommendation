@@ -63,171 +63,75 @@ ax.set_ylabel("Length (m)")
 
 st.pyplot(fig)
 
-# --- Interactive Map with Rooftop Polygon Drawing ---
-st.subheader("Draw Your Rooftop on Map")
+# --- Interactive Map for Rooftop Polygon Drawing ---
+st.subheader("Draw Your Rooftop Boundary")
 
-# Satellite basemap
-m = folium.Map(location=[20.93, 82.0], zoom_start=6, tiles=None)
-folium.TileLayer(
-    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attr="Esri",
-    name="Esri Satellite",
-    overlay=False,
-    control=True
-).add_to(m)
+# Create map (satellite view)
+m = folium.Map(location=[20.93, 82.0], zoom_start=6, tiles="CartoDB Positron")
 
-# Add drawing tool (polygon)
-from folium.plugins import Draw
-Draw(export=True, filename="rooftop.geojson", draw_options={"polygon": True, "rectangle": True}).add_to(m)
+# Add draw tools (polygon + rectangle)
+draw = Draw(
+    export=True,
+    filename="data.geojson",
+    draw_options={
+        "polyline": False,
+        "circle": False,
+        "circlemarker": False,
+        "marker": False,
+        "polygon": True,
+        "rectangle": True,
+    },
+    edit_options={"edit": True}
+)
+draw.add_to(m)
 
-# Show map in streamlit
+# Display map in Streamlit
 map_data = st_folium(m, width=700, height=500)
 
-# Check if user drew a polygon
+# If user has drawn something
 if map_data and map_data.get("all_drawings"):
     drawings = map_data["all_drawings"]
     if drawings:
-        rooftop_polygon = drawings[-1]["geometry"]["coordinates"][0]  # last drawn polygon
+        # Extract last drawn shape
+        rooftop_polygon = drawings[-1]["geometry"]["coordinates"]
+
+        # Handle Polygon or MultiPolygon
+        if isinstance(rooftop_polygon[0][0], (list, tuple)):
+            rooftop_polygon = rooftop_polygon[0]  # take outer ring
+
         st.success("✅ Rooftop polygon drawn!")
 
-        # Show polygon coords
-        st.write("Polygon Coordinates (lat, lon):")
+        # Show polygon coordinates
+        st.write("Polygon Coordinates (lon, lat):")
         st.write(rooftop_polygon)
 
-        # Estimate rooftop area (very rough, needs geodesic calculation)
-        # Convert polygon into numpy array of lat/lon
+        # Convert into numpy array
         poly = np.array(rooftop_polygon)
 
-        # Approximate meters per degree
-        lat = poly[:,1].mean()
-        meters_per_deg_lat = 111000
-        meters_per_deg_lon = 111000 * np.cos(np.radians(lat))
+        # Extract lon/lat
+        lons = poly[:, 0]
+        lats = poly[:, 1]
 
-        # Convert coords into meters
-        x = (poly[:,0] - poly[:,0].mean()) * meters_per_deg_lon
-        y = (poly[:,1] - poly[:,1].mean()) * meters_per_deg_lat
+        # Compute approximate area (rough estimate in m²)
+        # Here we use a bounding box approximation
+        lat_span = (lats.max() - lats.min()) * 111000  # meters per degree latitude
+        lon_span = (lons.max() - lons.min()) * 111000 * np.cos(np.radians(lats.mean()))
+        rooftop_area = abs(lat_span * lon_span)
 
-        # Polygon area using shoelace formula
-        area_m2 = 0.5 * np.abs(np.dot(x, np.roll(y,1)) - np.dot(y, np.roll(x,1)))
+        st.write(f"Estimated Rooftop Area: **{rooftop_area:.2f} m²**")
 
-        st.write(f"Estimated Rooftop Area: {area_m2:.2f} m²")
+        # Estimate panels fit
+        panel_area = 1.7 * 1.0  # m² per panel
+        panels_fit = int(rooftop_area / panel_area)
 
-        # How many panels fit
-        panels_fit = int(area_m2 // panel_area)
-        st.write(f"Panels Fit: {panels_fit}")
+        st.write(f"Estimated Panels Fit: **{panels_fit} panels**")
 
-        # Redraw map with panels inside polygon (centered grid)
-        m2 = folium.Map(location=[poly[:,1].mean(), poly[:,0].mean()], zoom_start=20, tiles=None)
-        folium.TileLayer(
-            tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            attr="Esri",
-            name="Esri Satellite",
-            overlay=False,
-            control=True
-        ).add_to(m2)
+        # Add the polygon back on the map for visualization
+        folium.Polygon(
+            locations=[(lat, lon) for lon, lat in rooftop_polygon],
+            color="blue",
+            fill=True,
+            fill_opacity=0.3,
+        ).add_to(m)
 
-        folium.Polygon(rooftop_polygon, color="cyan", fill=True, fill_opacity=0.3).add_to(m2)
-
-        # Place panels as rectangles (just scatter in bounding box)
-        meters_per_degree_lon = meters_per_deg_lon
-        meters_per_degree_lat = meters_per_deg_lat
-
-        offset_x = panel_width / meters_per_degree_lon
-        offset_y = panel_length / meters_per_degree_lat
-
-        count = 0
-        lat_min, lon_min = poly[:,1].min(), poly[:,0].min()
-
-        for i in range(20):  # try filling rows
-            for j in range(20):  # try filling cols
-                if count < panels_fit:
-                    lat1 = lat_min + i * offset_y
-                    lon1 = lon_min + j * offset_x
-                    lat2 = lat1 + offset_y
-                    lon2 = lon1 + offset_x
-                    folium.Rectangle(
-                        bounds=[[lat1, lon1], [lat2, lon2]],
-                        color="yellow", fill=True, fill_opacity=0.5
-                    ).add_to(m2)
-                    count += 1
-
-        st_folium(m2, width=700, height=500)
-
-
-if map_data and map_data.get("last_clicked"):
-    latitude = map_data["last_clicked"]["lat"]
-    longitude = map_data["last_clicked"]["lng"]
-
-    st.success(f"✅ Rooftop selected at: {latitude:.5f}, {longitude:.5f}")
-
-    # Draw panels on rooftop with satellite view
-    m2 = folium.Map(location=[latitude, longitude], zoom_start=20, tiles=None)
-    folium.TileLayer(
-        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        attr="Esri",
-        name="Esri Satellite",
-        overlay=False,
-        control=True
-    ).add_to(m2)
-
-    meters_per_degree_lat = 111000
-    meters_per_degree_lon = 111000 * np.cos(np.radians(latitude))
-
-    offset_x = panel_width / meters_per_degree_lon
-    offset_y = panel_length / meters_per_degree_lat
-
-    count = 0
-    for i in range(rows):
-        for j in range(cols):
-            if count < panels_fit:
-                lat1 = latitude + i * offset_y
-                lon1 = longitude + j * offset_x
-                lat2 = lat1 + offset_y
-                lon2 = lon1 + offset_x
-                folium.Rectangle(
-                    bounds=[[lat1, lon1], [lat2, lon2]],
-                    color="yellow",
-                    fill=True,
-                    fill_opacity=0.5
-                ).add_to(m2)
-                count += 1
-
-    st_folium(m2, width=700, height=500)
-
-
-if map_data and map_data.get("last_clicked"):
-    latitude = map_data["last_clicked"]["lat"]
-    longitude = map_data["last_clicked"]["lng"]
-
-    st.success(f"✅ Rooftop selected at: {latitude:.5f}, {longitude:.5f}")
-
-    # Draw panels on selected rooftop
-    m2 = folium.Map(location=[latitude, longitude], zoom_start=20, tiles="OpenStreetMap")
-
-    meters_per_degree_lat = 111000
-    meters_per_degree_lon = 111000 * np.cos(np.radians(latitude))
-
-    offset_x = panel_width / meters_per_degree_lon
-    offset_y = panel_length / meters_per_degree_lat
-
-    count = 0
-    for i in range(rows):
-        for j in range(cols):
-            if count < panels_fit:
-                lat1 = latitude + i * offset_y
-                lon1 = longitude + j * offset_x
-                lat2 = lat1 + offset_y
-                lon2 = lon1 + offset_x
-                folium.Rectangle(
-                    bounds=[[lat1, lon1], [lat2, lon2]],
-                    color="blue",
-                    fill=True,
-                    fill_opacity=0.5
-                ).add_to(m2)
-                count += 1
-
-    st_folium(m2, width=700, height=500)
-
-
-
-
+        st_folium(m, width=700, height=500)
