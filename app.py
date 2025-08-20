@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 import folium
 from streamlit_folium import st_folium
 
+st.set_page_config(layout="wide")
+
 # --- Sidebar Inputs ---
 st.sidebar.header("User Input")
-location = st.sidebar.text_input("Enter Location", "Raipur, India")
-latitude = st.sidebar.number_input("Latitude", 20.93)
-longitude = st.sidebar.number_input("Longitude", 82.0)
+location = st.sidebar.text_input("Enter Location Name (Optional)", "Raipur, India")
 rooftop_area = st.sidebar.number_input("Rooftop Area (m²)", 50, 1000, 200)
 
 # Panel assumptions
@@ -63,33 +63,46 @@ ax.set_ylabel("Length (m)")
 
 st.pyplot(fig)
 
-# --- Folium Map with Panel Overlay ---
-st.subheader("Panel Layout on Map")
+# --- Interactive Map for Rooftop Selection ---
+st.subheader("Select Your Rooftop on Map")
 
-m = folium.Map(location=[latitude, longitude], zoom_start=20, tiles="OpenStreetMap")
+# Default map (India center)
+m = folium.Map(location=[20.93, 82.0], zoom_start=6, tiles="OpenStreetMap")
 
-# Create a simple rectangular layout for panels around the chosen lat/lon
-# Convert meters to degrees approx (1 deg lat ≈ 111,000 m, lon depends on latitude)
-meters_per_degree_lat = 111000
-meters_per_degree_lon = 111000 * np.cos(np.radians(latitude))
+# Let user click on the map
+map_data = st_folium(m, width=700, height=500)
 
-offset_x = panel_width / meters_per_degree_lon
-offset_y = panel_length / meters_per_degree_lat
+if map_data and map_data.get("last_clicked"):
+    latitude = map_data["last_clicked"]["lat"]
+    longitude = map_data["last_clicked"]["lng"]
 
-count = 0
-for i in range(rows):
-    for j in range(cols):
-        if count < panels_fit:
-            lat1 = latitude + i * offset_y
-            lon1 = longitude + j * offset_x
-            lat2 = lat1 + offset_y
-            lon2 = lon1 + offset_x
-            folium.Rectangle(
-                bounds=[[lat1, lon1], [lat2, lon2]],
-                color="blue",
-                fill=True,
-                fill_opacity=0.5
-            ).add_to(m)
-            count += 1
+    st.success(f"✅ Rooftop selected at: {latitude:.5f}, {longitude:.5f}")
 
-st_folium(m, width=700, height=500)
+    # Draw panels on selected rooftop
+    m2 = folium.Map(location=[latitude, longitude], zoom_start=20, tiles="OpenStreetMap")
+
+    meters_per_degree_lat = 111000
+    meters_per_degree_lon = 111000 * np.cos(np.radians(latitude))
+
+    offset_x = panel_width / meters_per_degree_lon
+    offset_y = panel_length / meters_per_degree_lat
+
+    count = 0
+    for i in range(rows):
+        for j in range(cols):
+            if count < panels_fit:
+                lat1 = latitude + i * offset_y
+                lon1 = longitude + j * offset_x
+                lat2 = lat1 + offset_y
+                lon2 = lon1 + offset_x
+                folium.Rectangle(
+                    bounds=[[lat1, lon1], [lat2, lon2]],
+                    color="blue",
+                    fill=True,
+                    fill_opacity=0.5
+                ).add_to(m2)
+                count += 1
+
+    st_folium(m2, width=700, height=500)
+
+
