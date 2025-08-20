@@ -1,11 +1,13 @@
-streamlit
-folium
-shapely
-fpdf
-matplotlib
-pillow
-numpy
-requests
-torch
-torchvision
+streamlit==1.26.1
+folium==0.14.0
+shapely==2.1.1
+fpdf==1.7.2
+matplotlib==3.8.1
+pillow==10.0.1
+numpy==1.26.0
+requests==2.32.0
+torch==2.1.0
+torchvision==0.16.1
+
+
 
