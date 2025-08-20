@@ -1,5 +1,11 @@
 streamlit
 folium
-streamlit-folium
-pandas
+shapely
+fpdf
 matplotlib
+pillow
+numpy
+requests
+torch
+torchvision
+
