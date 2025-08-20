@@ -2,9 +2,10 @@ streamlit
 streamlit-folium
 folium
 numpy
-matplotlib
 Pillow
+plotly
 fpdf
+
 
 
 
