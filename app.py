@@ -66,11 +66,59 @@ st.pyplot(fig)
 # --- Interactive Map for Rooftop Selection ---
 st.subheader("Select Your Rooftop on Map")
 
-# Default map (India center)
-m = folium.Map(location=[20.93, 82.0], zoom_start=6, tiles="OpenStreetMap")
+# Satellite basemap (Esri World Imagery)
+m = folium.Map(location=[20.93, 82.0], zoom_start=6, tiles=None)
+folium.TileLayer(
+    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attr="Esri",
+    name="Esri Satellite",
+    overlay=False,
+    control=True
+).add_to(m)
 
 # Let user click on the map
 map_data = st_folium(m, width=700, height=500)
+
+if map_data and map_data.get("last_clicked"):
+    latitude = map_data["last_clicked"]["lat"]
+    longitude = map_data["last_clicked"]["lng"]
+
+    st.success(f"✅ Rooftop selected at: {latitude:.5f}, {longitude:.5f}")
+
+    # Draw panels on rooftop with satellite view
+    m2 = folium.Map(location=[latitude, longitude], zoom_start=20, tiles=None)
+    folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri",
+        name="Esri Satellite",
+        overlay=False,
+        control=True
+    ).add_to(m2)
+
+    meters_per_degree_lat = 111000
+    meters_per_degree_lon = 111000 * np.cos(np.radians(latitude))
+
+    offset_x = panel_width / meters_per_degree_lon
+    offset_y = panel_length / meters_per_degree_lat
+
+    count = 0
+    for i in range(rows):
+        for j in range(cols):
+            if count < panels_fit:
+                lat1 = latitude + i * offset_y
+                lon1 = longitude + j * offset_x
+                lat2 = lat1 + offset_y
+                lon2 = lon1 + offset_x
+                folium.Rectangle(
+                    bounds=[[lat1, lon1], [lat2, lon2]],
+                    color="yellow",
+                    fill=True,
+                    fill_opacity=0.5
+                ).add_to(m2)
+                count += 1
+
+    st_folium(m2, width=700, height=500)
+
 
 if map_data and map_data.get("last_clicked"):
     latitude = map_data["last_clicked"]["lat"]
@@ -104,5 +152,6 @@ if map_data and map_data.get("last_clicked"):
                 count += 1
 
     st_folium(m2, width=700, height=500)
+
 
 
