@@ -1,10 +1,12 @@
 streamlit
 streamlit-folium
 folium
+matplotlib
 numpy
-Pillow
-plotly
+pandas
+requests
 fpdf
+plotly
 
 
 
