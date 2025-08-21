@@ -193,16 +193,38 @@ if returned and "last_clicked" in returned and returned["last_clicked"] is not N
 
 st.subheader("🔆 Solar Resource (Monthly PSH)")
 
-monthly_psh = fetch_nasa_power_monthly(lat, lon)
-if monthly_psh is None:
-    st.warning("Could not fetch NASA POWER data (offline or blocked). Using typical fallback PSH (kWh/kW/day).")
-    # a simple generic profile for India-like latitudes
-    monthly_psh = {
-        "Jan":4.5,"Feb":5.2,"Mar":6.0,"Apr":6.4,"May":6.5,"Jun":5.5,
-        "Jul":4.8,"Aug":5.0,"Sep":5.8,"Oct":5.7,"Nov":5.0,"Dec":4.6
-    }
-else:
-    st.success("NASA POWER monthly averages loaded (ALLSKY_SFC_SW_DWN). Interpreted as PSH.")
+def fetch_solar_ghi(lat, lon):
+    """
+    Fetch monthly PSH (Peak Sun Hours) from NASA POWER API.
+    If unavailable, fallback to PVGIS API.
+    If still unavailable, use typical 5.0 kWh/m²/day average.
+    """
+    # --- Try NASA POWER ---
+    try:
+        url = f"https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=ALLSKY_KT,ALLSKY_SFC_SW_DWN&community=RE&longitude={lon}&latitude={lat}&format=JSON"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        ghi_monthly = data['properties']['parameter']['ALLSKY_SFC_SW_DWN']
+        ghi_avg = np.mean(list(ghi_monthly.values()))
+        return ghi_avg, ghi_monthly, "NASA POWER"
+    except:
+        pass
+
+    # --- Try PVGIS ---
+    try:
+        url = f"https://re.jrc.ec.europa.eu/api/DRcalc?lat={lat}&lon={lon}&outputformat=json"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        months = data['outputs']['monthly']['fixed']['E_d']  # kWh/m² per month
+        ghi_monthly = {str(i+1): val/30.0 for i, val in enumerate(months)}  # convert to daily avg
+        ghi_avg = np.mean(list(ghi_monthly.values()))
+        return ghi_avg, ghi_monthly, "PVGIS"
+    except:
+        pass
+
+    # --- Fallback Default ---
+    ghi_monthly = {str(i+1): 5.0 for i in range(12)}
+    return 5.0, ghi_monthly, "Fallback Avg"
 
 # ---------------------------- Panel Fit & System Size ---------------------------- #
 
@@ -340,3 +362,4 @@ st.write(f"""
 """)
 
 st.caption("Note: Estimates are indicative. On-site shading analysis and structural checks are recommended before installation.")
+
